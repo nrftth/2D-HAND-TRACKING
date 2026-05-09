@@ -1,51 +1,527 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Pinch Drop Game</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pinch Drop Game</title>
 
-  <link rel="stylesheet" href="style.css"/>
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
-  <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+body{
+  width:100vw;
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:#101623;
+  overflow:hidden;
+  font-family:Arial, Helvetica, sans-serif;
+}
+
+/* ===== 1:1 GAME AREA ===== */
+#gameWrapper{
+  width:min(92vw,92vh);
+  height:min(92vw,92vh);
+
+  position:relative;
+  overflow:hidden;
+
+  border-radius:25px;
+  border:4px solid rgba(255,255,255,0.1);
+
+  background:#1d2940;
+}
+
+/* Webcam */
+#video{
+  position:absolute;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+
+  transform:scaleX(-1);
+  opacity:0.18;
+}
+
+/* Canvas */
+#canvas{
+  position:absolute;
+  width:100%;
+  height:100%;
+  z-index:2;
+}
+
+/* UI */
+#ui{
+  position:absolute;
+  top:15px;
+  left:15px;
+  z-index:10;
+
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.scoreBox,
+.timerBox{
+  background:rgba(0,0,0,0.5);
+  color:white;
+  padding:12px 18px;
+  border-radius:14px;
+  font-weight:bold;
+  backdrop-filter:blur(8px);
+}
+
+#startBtn{
+  border:none;
+  background:#47ff90;
+  color:black;
+  padding:14px;
+  border-radius:14px;
+  font-weight:bold;
+  cursor:pointer;
+  transition:0.2s;
+}
+
+#startBtn:hover{
+  transform:scale(1.05);
+}
+
+/* Bag */
+#bag{
+  position:absolute;
+  right:25px;
+  bottom:25px;
+
+  width:160px;
+  height:160px;
+
+  background:rgba(255,255,255,0.08);
+
+  border:3px dashed #ffffff55;
+
+  border-radius:24px;
+
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+
+  font-size:65px;
+  color:white;
+
+  z-index:5;
+}
+
+.bagText{
+  font-size:16px;
+  margin-top:10px;
+  font-weight:bold;
+}
+
+/* Cursor */
+#cursor{
+  position:absolute;
+  width:30px;
+  height:30px;
+  border-radius:50%;
+
+  background:#00ff95;
+  box-shadow:0 0 20px #00ff95;
+
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:20;
+
+  transition:background 0.1s;
+}
+
+/* Particles */
+.particle{
+  position:absolute;
+  width:12px;
+  height:12px;
+  background:#47ff90;
+  border-radius:50%;
+  pointer-events:none;
+  z-index:100;
+
+  animation:pop 0.8s linear forwards;
+}
+
+@keyframes pop{
+  to{
+    transform:
+      translate(var(--x), var(--y))
+      scale(0);
+
+    opacity:0;
+  }
+}
+</style>
 </head>
+
 <body>
 
-  <div id="gameWrapper">
+<div id="gameWrapper">
 
-    <!-- Webcam -->
-    <video id="video" autoplay playsinline></video>
+  <!-- Webcam -->
+  <video id="video" autoplay playsinline></video>
 
-    <!-- Game Canvas -->
-    <canvas id="canvas"></canvas>
+  <!-- Game Canvas -->
+  <canvas id="canvas"></canvas>
 
-    <!-- UI -->
-    <div id="ui">
-      <div class="scoreBox">
-        SCORE: <span id="score">0</span>
-      </div>
-
-      <div class="timerBox">
-        TIME: <span id="timer">60</span>
-      </div>
-
-      <button id="startBtn">START GAME</button>
+  <!-- UI -->
+  <div id="ui">
+    <div class="scoreBox">
+      SCORE: <span id="score">0</span>
     </div>
 
-    <!-- Bag -->
-    <div id="bag">
-      👜
-      <div class="bagText">DROP HERE</div>
+    <div class="timerBox">
+      TIME: <span id="timer">60</span>
     </div>
 
-    <!-- Hand Cursor -->
-    <div id="cursor"></div>
-
+    <button id="startBtn">START GAME</button>
   </div>
 
-  <script src="script.js"></script>
+  <!-- Bag -->
+  <div id="bag">
+    👜
+    <div class="bagText">DROP HERE</div>
+  </div>
+
+  <!-- Cursor -->
+  <div id="cursor"></div>
+
+</div>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const scoreText = document.getElementById("score");
+const timerText = document.getElementById("timer");
+
+const cursor = document.getElementById("cursor");
+const bag = document.getElementById("bag");
+
+const startBtn = document.getElementById("startBtn");
+
+let score = 0;
+let timeLeft = 60;
+let gameStarted = false;
+
+let pinch = false;
+
+let handX = 0;
+let handY = 0;
+
+let grabbedObject = null;
+
+let objects = [];
+
+const OBJECT_SIZE = 70;
+
+/* =========================
+   RESIZE
+========================= */
+function resizeCanvas(){
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+/* =========================
+   OBJECTS
+========================= */
+
+function createObjects(){
+
+  objects = [];
+
+  const emojis = ["📘","🍼","🍎","🎁","🧸","📱"];
+
+  for(let i=0;i<6;i++){
+
+    objects.push({
+      x: Math.random() * (canvas.width - 250) + 20,
+      y: Math.random() * (canvas.height - 250) + 20,
+
+      size: OBJECT_SIZE,
+
+      emoji: emojis[i % emojis.length],
+
+      grabbed: false
+    });
+  }
+}
+
+/* =========================
+   DRAW
+========================= */
+
+function draw(){
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  objects.forEach(obj => {
+
+    ctx.save();
+
+    ctx.font = `${obj.size}px Arial`;
+    ctx.textAlign = "center";
+
+    if(obj.grabbed){
+      ctx.shadowColor = "#47ff90";
+      ctx.shadowBlur = 30;
+    }
+
+    ctx.fillText(
+      obj.emoji,
+      obj.x,
+      obj.y
+    );
+
+    ctx.restore();
+  });
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+
+/* =========================
+   GAME LOOP
+========================= */
+
+function updateGame(){
+
+  if(!gameStarted) return;
+
+  objects.forEach(obj => {
+
+    // grab object
+    if(
+      pinch &&
+      !grabbedObject &&
+      distance(handX, handY, obj.x, obj.y) < 60
+    ){
+      grabbedObject = obj;
+      obj.grabbed = true;
+    }
+
+    // follow hand
+    if(grabbedObject === obj){
+
+      obj.x = handX;
+      obj.y = handY;
+
+      // release
+      if(!pinch){
+
+        obj.grabbed = false;
+
+        if(isInsideBag(obj)){
+
+          score++;
+          scoreText.innerText = score;
+
+          createParticles(obj.x, obj.y);
+
+          respawn(obj);
+        }
+
+        grabbedObject = null;
+      }
+    }
+
+  });
+
+  requestAnimationFrame(updateGame);
+}
+
+updateGame();
+
+/* =========================
+   HELPERS
+========================= */
+
+function distance(x1,y1,x2,y2){
+  return Math.hypot(x2-x1, y2-y1);
+}
+
+function isInsideBag(obj){
+
+  const bagRect = bag.getBoundingClientRect();
+  const gameRect = canvas.getBoundingClientRect();
+
+  const bx = bagRect.left - gameRect.left;
+  const by = bagRect.top - gameRect.top;
+
+  return (
+    obj.x > bx &&
+    obj.x < bx + bagRect.width &&
+    obj.y > by &&
+    obj.y < by + bagRect.height
+  );
+}
+
+function respawn(obj){
+
+  obj.x = Math.random() * (canvas.width - 200) + 50;
+  obj.y = Math.random() * (canvas.height - 200) + 50;
+}
+
+/* =========================
+   PARTICLES
+========================= */
+
+function createParticles(x,y){
+
+  for(let i=0;i<18;i++){
+
+    const p = document.createElement("div");
+
+    p.className = "particle";
+
+    p.style.left = `${x}px`;
+    p.style.top = `${y}px`;
+
+    p.style.setProperty(
+      "--x",
+      `${(Math.random()-0.5)*220}px`
+    );
+
+    p.style.setProperty(
+      "--y",
+      `${(Math.random()-0.5)*220}px`
+    );
+
+    document.getElementById("gameWrapper").appendChild(p);
+
+    setTimeout(()=>{
+      p.remove();
+    },800);
+  }
+}
+
+/* =========================
+   START GAME
+========================= */
+
+startBtn.onclick = () => {
+
+  if(gameStarted) return;
+
+  gameStarted = true;
+
+  createObjects();
+
+  startBtn.innerText = "RUNNING...";
+
+  const timer = setInterval(()=>{
+
+    timeLeft--;
+
+    timerText.innerText = timeLeft;
+
+    if(timeLeft <= 0){
+
+      clearInterval(timer);
+
+      alert(`TIME UP!\\nSCORE: ${score}`);
+
+      location.reload();
+    }
+
+  },1000);
+};
+
+/* =========================
+   HAND TRACKING
+========================= */
+
+const hands = new Hands({
+  locateFile: (file) => {
+    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+  }
+});
+
+hands.setOptions({
+  maxNumHands:1,
+  modelComplexity:1,
+  minDetectionConfidence:0.7,
+  minTrackingConfidence:0.7
+});
+
+hands.onResults(results => {
+
+  if(results.multiHandLandmarks.length > 0){
+
+    const landmarks = results.multiHandLandmarks[0];
+
+    // thumb tip
+    const thumb = landmarks[4];
+
+    // index tip
+    const index = landmarks[8];
+
+    // convert to screen coords
+    handX = (1 - index.x) * canvas.width;
+    handY = index.y * canvas.height;
+
+    // move cursor
+    cursor.style.left = `${handX}px`;
+    cursor.style.top = `${handY}px`;
+
+    // pinch detection
+    const dx = thumb.x - index.x;
+    const dy = thumb.y - index.y;
+
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    if(dist < 0.045){
+
+      pinch = true;
+
+      cursor.style.background = "#ff4d7a";
+      cursor.style.boxShadow = "0 0 20px #ff4d7a";
+
+    }else{
+
+      pinch = false;
+
+      cursor.style.background = "#00ff95";
+      cursor.style.boxShadow = "0 0 20px #00ff95";
+    }
+  }
+});
+
+const camera = new Camera(video, {
+  onFrame: async () => {
+    await hands.send({image: video});
+  },
+
+  width:640,
+  height:640
+});
+
+camera.start();
+</script>
+
 </body>
 </html>
