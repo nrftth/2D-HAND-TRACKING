@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pinch Drop Game</title>
+
+  <link rel="stylesheet" href="style.css"/>
+
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+</head>
+<body>
+
+  <div id="gameWrapper">
+
+    <!-- Webcam -->
+    <video id="video" autoplay playsinline></video>
+
+    <!-- Game Canvas -->
+    <canvas id="canvas"></canvas>
+
+    <!-- UI -->
+    <div id="ui">
+      <div class="scoreBox">
+        SCORE: <span id="score">0</span>
+      </div>
+
+      <div class="timerBox">
+        TIME: <span id="timer">60</span>
+      </div>
+
+      <button id="startBtn">START GAME</button>
+    </div>
+
+    <!-- Bag -->
+    <div id="bag">
+      👜
+      <div class="bagText">DROP HERE</div>
+    </div>
+
+    <!-- Hand Cursor -->
+    <div id="cursor"></div>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
